@@ -1,3 +1,17 @@
+module type Comparable =
+  sig
+
+    type t
+
+    val compare : t -> t -> int
+
+    val equal : t -> t -> bool
+
+    val to_string : t -> string
+
+  end
+
+
 module Int =
   struct
 
@@ -11,9 +25,14 @@ module Int =
       else
         1
 
+    let equal (x : int) (y : int) = x = y
+          
+    let to_string = string_of_int
+
   end
     
 module IntSet = Set.Make(Int)
+                        
 module IntMap =
   struct
     include Map.Make(Int)

@@ -24,7 +24,7 @@ module type S =
   sig
 
     type t
-
+           
     type perm
 
     (* Accessing the group *)
@@ -46,12 +46,14 @@ module type S =
   end
 
 (* The implementation of Schreier-Sims is functorialized over an implementation of permutations.  *)    
-module Make(Perm : Perm.S) : S with type perm = Perm.t =
+module Make(Perm : Perm.S) : (S with type perm = Perm.t) =
   struct
 
     open Tools
-    
-    type transversal = Perm.t IntMap.t
+
+    module Map = Map.Make(Perm.E)
+                         
+    type transversal = Perm.t Map.t
 
     (* If base = b_1 ... b_k; we have subgroups
      * G = G^(1) >= G^(2) .... G^(k+1) = <1>
@@ -67,7 +69,7 @@ module Make(Perm : Perm.S) : S with type perm = Perm.t =
     (* cosets of G mod Stab_{b_1,..,b_i}(G) *)                              
     type slice =
       {
-        base          : int;
+        base          : Perm.elt;
         cosets        : transversal;
         reprs         : Perm.t list;    (* [reprs] = codomain of [cosets] *)
         gens          : Perm.t list;    (* strong generating set for the whole (sub)group *)
@@ -79,12 +81,12 @@ module Make(Perm : Perm.S) : S with type perm = Perm.t =
     type t = slice list
 
     let print_transversal tr =
-      IntMap.fold (fun pt repr acc -> acc^(Printf.sprintf "from base to %d by %s\n") pt (Perm.print repr)) tr ""
+      Map.fold (fun pt repr acc -> acc^(Printf.sprintf "from base to %s by %s\n") (Perm.E.to_string pt) (Perm.print repr)) tr ""
                    
     let print { base; cosets; gens } =
       Printf.printf
-        "base = %d\ncosets =\n %s\ngens=\n%s\n-----------------------------\n"
-        base
+        "base = %s\ncosets =\n %s\ngens=\n%s\n-----------------------------\n"
+        (Perm.E.to_string base)
         (print_transversal cosets)
         (List.fold_left (fun acc perm -> acc^(Printf.sprintf "%s\n" (Perm.print perm))) "" gens)
                    
@@ -95,11 +97,11 @@ module Make(Perm : Perm.S) : S with type perm = Perm.t =
          Perm.equal perm Perm.identity
       | slice :: subgroup ->
          let im = Perm.action perm slice.base in
-         if im = slice.base then
+         if Perm.E.equal im slice.base then
            mem subgroup perm
          else
            try 
-             let coset_p = IntMap.find im slice.cosets in
+             let coset_p = Map.find im slice.cosets in
              let rem     = Perm.prod perm (Perm.inv coset_p) in
              mem subgroup rem
            with
@@ -109,7 +111,7 @@ module Make(Perm : Perm.S) : S with type perm = Perm.t =
       match group with
       | []                -> current_word :: acc
       | slice :: subgroup -> 
-         IntMap.fold
+         Map.fold
            (fun _ elt acc ->
             list_aux subgroup (Perm.prod elt current_word) acc
            ) slice.cosets acc
@@ -137,21 +139,21 @@ module Make(Perm : Perm.S) : S with type perm = Perm.t =
     (* Schreier-Sims construction *)
 
     let transversal_reprs transversal =
-      IntMap.fold (fun _ elt acc -> elt :: acc) transversal []
+      Map.fold (fun _ elt acc -> elt :: acc) transversal []
 
     let rec orbit_aux group point coset_repr transversal =
       List.fold_left (fun transversal g ->
                       let point' = Perm.action g point in
-                      if IntMap.mem point' transversal then
+                      if Map.mem point' transversal then
                         transversal
                       else
                         let prod        = Perm.prod coset_repr g in
-                        let transversal = IntMap.add point' prod transversal in
+                        let transversal = Map.add point' prod transversal in
                         orbit_aux group point' prod transversal
                      ) transversal group
 
     let orbit group point =
-      let transversal = IntMap.add point Perm.identity IntMap.empty in
+      let transversal = Map.add point Perm.identity Map.empty in
       orbit_aux group point Perm.identity transversal
 
     let rec pick_from_support generators =
@@ -163,7 +165,9 @@ module Make(Perm : Perm.S) : S with type perm = Perm.t =
          | x    -> x
 
     let extend_transversal transversal group =
-      IntMap.fold (fun point repr transversal -> orbit_aux group point repr transversal) transversal transversal
+      Map.fold (fun point repr transversal ->
+                orbit_aux group point repr transversal
+               ) transversal transversal
 
     let rec extend subgroup_chain perm =
       match subgroup_chain with
@@ -193,10 +197,10 @@ module Make(Perm : Perm.S) : S with type perm = Perm.t =
          let slice  = { slice with cosets; reprs; gens; index } in
          let subgroup =
            let im = Perm.action perm slice.base in
-           if im = slice.base then
+           if Perm.E.equal im slice.base then
              extend subgroup perm
            else
-             let coset_p = IntMap.find im slice.cosets in
+             let coset_p = Map.find im slice.cosets in
              let rem     = Perm.prod perm (Perm.inv coset_p) in
              extend subgroup rem
          in
@@ -210,11 +214,11 @@ module Make(Perm : Perm.S) : S with type perm = Perm.t =
               else
                 let p = Perm.prod coset_repr generator in
                 let r =
-                  try IntMap.find (Perm.action p slice.base) slice.cosets
+                  try Map.find (Perm.action p slice.base) slice.cosets
                   with Not_found ->
                        begin
                          let s = Perm.print p in
-                         Printf.printf "perm=\n%s\nbase = %d\nschreier =\n %s\ntransversal=%s\n" (Perm.print perm) slice.base s (print_transversal slice'.cosets);
+                         Printf.printf "perm=\n%s\nbase = %s\nschreier =\n %s\ntransversal=%s\n" (Perm.print perm) (Perm.E.to_string slice.base) s (print_transversal slice'.cosets);
                          raise Not_found
                        end
                 in

@@ -19,7 +19,6 @@
  *)
 
 
-
 (* This module implements operations on permutations. Various applications
  * require different implementation of permutations, so we propose various
  * "concrete" implementations of the "PermSig" signature (disjoint cycle-based or
@@ -31,10 +30,16 @@
 open Printf
 open Tools
                         
-(* The abstract signature of an (integer) permutation implementation *)
+(* The abstract signature of a permutation implementation *)
 module type S =
   sig
 
+    (* The type of elements on which the permutations act *)
+    module E : Tools.Comparable
+    module Set : Set.S with type elt = E.t
+
+    type elt = E.t
+           
     type t
 
     (* Equality test *)
@@ -50,16 +55,16 @@ module type S =
     val inv      : t -> t
 
     (* action *)
-    val action   : t -> int -> int
+    val action   : t -> elt -> elt
 
     (* orbit *)
-    val orbit    : t -> int -> IntSet.t
+    val orbit    : t -> elt -> Set.t
 
     (* any point not fixed by the perm. *)
-    val pick_from_support : t -> int option
+    val pick_from_support : t -> elt option
 
-    val of_cycles : int array list -> t
-    val of_array  : int array -> t
+    val of_cycles : elt array list -> t
+    (* val of_array  : int array -> t *)
 
     val print : t -> string
 
@@ -77,44 +82,71 @@ module type S =
    The module DisjointCycles should implement PermSig.
  *)
 
-module CycleBased =
+module CycleBased(Elt : Tools.Comparable) : S with type E.t = Elt.t =
   struct
 
+
+    module E = Elt
+
+    module Set = Set.Make(E)
+    module Map = Map.Make(E)                         
+
+    type elt = Elt.t
+    
     (* Invariants:
      1 cycles are nonempty lists
      2 1-element cycles are omitted *)
-    type cycle = int array
+    type cycle = elt array
 
     (* A perm is a list of /disjoint/ cycles -- i.e. a set of cycles,
      * implemented as a map from elements to pairs of 
      * (cycles containing those elements, image through the permutation).
      * Sharing allows to not waste too much memory, and we compute the
      * orbit of an element in O(log(n)) (the access time) *)
-    type t = (cycle * int) IntMap.t
+    type t = (cycle * elt) Map.t
 
     (* Identity permutation *)
 
-    let equal p1 p2 = 
-      p1 = p2
+    exception Break of int
 
-    let identity  = IntMap.empty
+    let cycles_equal cyc1 cyc2 =
+      let len1 = Array.length cyc1 in
+      let len2 = Array.length cyc2 in
+      len1 = len2 &&
+        (let i   = ref 0 in
+         let res = ref true in
+         while !i < len1 do
+           if not (E.equal cyc1.(!i) cyc2.(!i)) then
+             (res := false;
+              i   := len1)
+           else ();
+           incr i
+         done;
+         !res)
+                           
+    let equal p1 p2 =
+      Map.equal (fun (cyc1, im1) (cyc2, im2) ->
+                 E.equal im1 im2 && cycles_equal cyc1 cyc2
+                ) p1 p2
+
+    let identity  = Map.empty
 
     let rec image_cycle_aux first point = function
       | [] -> failwith "Perm.image_cycle_aux: bug found"
       | [x] ->
-         if x = point then first
+         if E.equal x point then first
          else failwith "Perm.image_cycle_aux: bug found"
       | x :: ((y :: tl) as ytl) ->
-         if x = point then
+         if E.equal x point then
            y
          else
            (image_cycle_aux first point ytl)
 
     let image_cycle point cyc =
-      let res = ref 0 in
+      let res = ref point in
       let len = Array.length cyc in
       for i = 0 to len - 1 do
-        if cyc.(i) = point then
+        if E.equal cyc.(i) point then
           res := cyc.((i+1) mod len)
       done;
       !res
@@ -123,21 +155,21 @@ module CycleBased =
     (* O(log(n)) *)
     let image x perm =
       try 
-        snd (IntMap.find x perm)
+        snd (Map.find x perm)
       with
         Not_found -> x
 
     (* Orbit of an element through a perm, i.e. cycle of the elt *)
-    let orbit (perm : t) (x : int) =
+    let orbit (perm : t) (x : elt) =
       try 
-        let a = fst (IntMap.find x perm) in
-        Array.fold_right IntSet.add a IntSet.empty
+        let a = fst (Map.find x perm) in
+        Array.fold_right Set.add a Set.empty
       with
-        Not_found -> IntSet.singleton x
+        Not_found -> Set.singleton x
 
     let pick_from_support (perm : t) =
       try
-        let (x, _) = IntMap.choose perm in
+        let (x, _) = Map.choose perm in
         Some x
       with
         Not_found -> None
@@ -155,14 +187,14 @@ module CycleBased =
 
     (* Product of two permutations. This is relatively costly. *)
     let rec prod_aux p1 p2 i acc =
-      if not (IntMap.mem i acc) then
+      if not (Map.mem i acc) then
         let cyc = compute_cycle p1 p2 i in
         let len = Array.length cyc in
         (if len = 0 then
            failwith "Perm.prod: empty cycle"
          else if len > 1 then (* omit unit sized cycles *)
            Array.fold_left (fun map x ->
-                            IntMap.add x (cyc, image_cycle x cyc) map           
+                            Map.add x (cyc, image_cycle x cyc) map           
                            ) acc cyc
          else 
            acc)
@@ -172,13 +204,13 @@ module CycleBased =
     let prod p1 p2 =
       (* We only have to fold over the union of the domains of p1 and p2 *)
       let acc1 =
-        IntMap.fold (fun key _ acc ->
-                     prod_aux p1 p2 key acc
-                    ) p1 IntMap.empty
+        Map.fold (fun key _ acc ->
+                  prod_aux p1 p2 key acc
+                 ) p1 Map.empty
       in
-      IntMap.fold (fun key _ acc ->
-                   prod_aux p1 p2 key acc
-                  ) p2 acc1
+      Map.fold (fun key _ acc ->
+                prod_aux p1 p2 key acc
+               ) p2 acc1
                   
     (* Inverse of a cycle. *)
     let inv_cycle cyc =
@@ -209,10 +241,10 @@ module CycleBased =
 
     (* Inverse of a permutation. *)
     let inv (p : t) =
-      let invert_cycle = inv_cycle_persistent (IntMap.cardinal p) in
-      IntMap.fold (fun key (cycle, point) acc ->
-                   IntMap.add point (invert_cycle cycle, key) acc
-                  ) p IntMap.empty
+      let invert_cycle = inv_cycle_persistent (Map.cardinal p) in
+      Map.fold (fun key (cycle, point) acc ->
+                Map.add point (invert_cycle cycle, key) acc
+               ) p Map.empty
 
 
     (* compute the image of a point through a perm, i.e. the natural action
@@ -227,7 +259,7 @@ module CycleBased =
       !acc
 
     let add_mapping perm point image cycle =
-      IntMap.add point (cycle, image) perm
+      Map.add point (cycle, image) perm
 
     let rec push_cyc_aux cyc len i acc =
       if i = len then
@@ -235,7 +267,7 @@ module CycleBased =
       else
         let acc = add_mapping acc cyc.(i) cyc.((i+1) mod len) cyc in
         push_cyc_aux cyc len (i+1) acc
-
+                     
     let push_cyc perm cyc =
       let len = Array.length cyc in
       push_cyc_aux cyc len 0 perm
@@ -249,30 +281,34 @@ module CycleBased =
       if List.mem i cyc then List.rev cyc
       else cycle_of_elt arr arr.(i) (i :: cyc)
 
-    let rec of_array_aux arr i acc =
-      if i >= Array.length arr then acc
-      else if IntMap.mem i acc then
-        of_array_aux arr (i+1) acc
-      else
-        let cyc = Array.of_list (cycle_of_elt arr i []) in
-        let acc = push_cyc acc cyc in
-        of_array_aux arr (i+1) acc
+    (* let rec of_array_aux arr i acc = *)
+    (*   if i >= Array.length arr then acc *)
+    (*   else if Map.mem i acc then *)
+    (*     of_array_aux arr (i+1) acc *)
+    (*   else *)
+    (*     let cyc = Array.of_list (cycle_of_elt arr i []) in *)
+    (*     let acc = push_cyc acc cyc in *)
+    (*     of_array_aux arr (i+1) acc *)
 
-    let of_array arr =
-      let _ = failwith "TODO: does not preserve canonicity of identity perm" in
-      of_array_aux arr 0 identity
+    (* let of_array arr = *)
+    (*   let _ = failwith "TODO: does not preserve canonicity of identity perm" in *)
+    (*   of_array_aux arr 0 identity *)
 
+    let max_elt x y =
+      let c = E.compare x y in
+      if c < 0 then y
+      else x
+                        
     let print perm =
-      if IntMap.is_empty perm then
+      if Map.is_empty perm then
         "id"
       else
-        let support  = IntMap.fold (fun key (_, image) acc ->
-                                    max key (max image acc)
-                                   ) perm 0 in
-        let dom    = Tools.mk_ints 0 support in
-        let codom  = List.map (fun i -> image i perm) dom in
-        let doms   = Tools.to_sseq string_of_int " " dom in
-        let codoms = Tools.to_sseq string_of_int " " codom in
+        let bindings =
+          Map.fold (fun key (_, image) acc -> (key, image) :: acc) perm []
+        in
+        let dom, codom = List.split bindings in
+        let doms   = Tools.to_sseq E.to_string " " dom in
+        let codoms = Tools.to_sseq E.to_string " " codom in
         Printf.sprintf "%s\n%s\n" doms codoms
 
   end
@@ -282,6 +318,11 @@ module ArrayBased(Size : sig val size : int end) =
 
     let size = Size.size
 
+    module E   = Tools.Int
+    module Set = Tools.IntSet
+                 
+    type elt = int
+                 
     type t = int array
 
     let equal p1 p2 =
@@ -397,155 +438,156 @@ module type PermType =
       
   end
 
-module Make(Concrete : S) =
-  (struct
+    
+(* module Make(Concrete : S) = *)
+(*   (struct *)
 
-      module Concrete = Concrete
+(*       module Concrete = Concrete *)
                           
-      type permrec = 
-        { p       : Concrete.t;
-          invp    : Concrete.t; }
+(*       type permrec =  *)
+(*         { p       : Concrete.t; *)
+(*           invp    : Concrete.t; } *)
           
-      (* We want to avoid computing products and inverses unless we really need to.
-       * Products of perms are simply trees of perms, and we compute the product only
-       * when explicitly required. We tag each node with the support of the perm. *)
-      type t = 
-        | Perm of permrec
-        | Prod of t * t
-        | Inv  of t
+(*       (\* We want to avoid computing products and inverses unless we really need to. *)
+(*        * Products of perms are simply trees of perms, and we compute the product only *)
+(*        * when explicitly required. We tag each node with the support of the perm. *\) *)
+(*       type t =  *)
+(*         | Perm of permrec *)
+(*         | Prod of t * t *)
+(*         | Inv  of t *)
 
-      (* Normalise a perm *)
-      let rec normalise_aux x =
-        match x with
-        | Perm p -> p
-        | Prod(l, r) ->
-           let nl = normalise_aux l in
-           let nr = normalise_aux r in
-           { p    = Concrete.prod nl.p nr.p;
-             invp = Concrete.prod nr.invp nl.invp }
-        | Inv p ->
-           let np = normalise_aux p in
-           { p = np.invp; invp = np.p }
+(*       (\* Normalise a perm *\) *)
+(*       let rec normalise_aux x = *)
+(*         match x with *)
+(*         | Perm p -> p *)
+(*         | Prod(l, r) -> *)
+(*            let nl = normalise_aux l in *)
+(*            let nr = normalise_aux r in *)
+(*            { p    = Concrete.prod nl.p nr.p; *)
+(*              invp = Concrete.prod nr.invp nl.invp } *)
+(*         | Inv p -> *)
+(*            let np = normalise_aux p in *)
+(*            { p = np.invp; invp = np.p } *)
              
-      let of_concrete (p : Concrete.t) =
-        Perm { p    = p;
-               invp = Concrete.inv p }
+(*       let of_concrete (p : Concrete.t) = *)
+(*         Perm { p    = p; *)
+(*                invp = Concrete.inv p } *)
 
-      let normalise x = Perm (normalise_aux x)
+(*       let normalise x = Perm (normalise_aux x) *)
 
-      let identity = Perm { p = Concrete.identity; invp = Concrete.identity }
+(*       let identity = Perm { p = Concrete.identity; invp = Concrete.identity } *)
 
-      let is_identity x =
-        (normalise_aux x).p = Concrete.identity
+(*       let is_identity x = *)
+(*         (normalise_aux x).p = Concrete.identity *)
 
 
-      (* Moderately smart constructor (still O(1)) *)
-      let invert p =
-        match p with
-        | Inv p' -> p'
-        | _ -> Inv p
+(*       (\* Moderately smart constructor (still O(1)) *\) *)
+(*       let invert p = *)
+(*         match p with *)
+(*         | Inv p' -> p' *)
+(*         | _ -> Inv p *)
 
-      let rec power x n =
-        if n = 0 then identity
-        else if n = 1 then x
-        else if n mod 2 = 0 then
-          let px = power x (n/2) in
-          Prod(px, px)
-        else
-          let px = power x (n/2) in
-          Prod(Prod(px, px),px)
+(*       let rec power x n = *)
+(*         if n = 0 then identity *)
+(*         else if n = 1 then x *)
+(*         else if n mod 2 = 0 then *)
+(*           let px = power x (n/2) in *)
+(*           Prod(px, px) *)
+(*         else *)
+(*           let px = power x (n/2) in *)
+(*           Prod(Prod(px, px),px) *)
 
-      let rec action perm point =
-        match perm with
-        | Perm p -> Concrete.action p.p point
-        | Prod(l, r) ->
-           action r (action l point)
-        | Inv p ->
-           invert_action p point
+(*       let rec action perm point = *)
+(*         match perm with *)
+(*         | Perm p -> Concrete.action p.p point *)
+(*         | Prod(l, r) -> *)
+(*            action r (action l point) *)
+(*         | Inv p -> *)
+(*            invert_action p point *)
 
-      and invert_action perm point =
-        match perm with
-        | Perm p -> Concrete.action p.invp point
-        | Prod(l, r) ->
-           invert_action l (invert_action r point)
-        | Inv p ->
-           action p point
+(*       and invert_action perm point = *)
+(*         match perm with *)
+(*         | Perm p -> Concrete.action p.invp point *)
+(*         | Prod(l, r) -> *)
+(*            invert_action l (invert_action r point) *)
+(*         | Inv p -> *)
+(*            action p point *)
 
-      (* Compute the orbit of a set of elements, and for each point in the
-     orbit, a transversal. Another slower but more compact method would be to
-     use a Schreier tree (i.e. a prefix tree with paths labelled by permutation 
-     words). Storing the full transversal allows for direct access to
-     its elements. 
+(*       (\* Compute the orbit of a set of elements, and for each point in the *)
+(*      orbit, a transversal. Another slower but more compact method would be to *)
+(*      use a Schreier tree (i.e. a prefix tree with paths labelled by permutation  *)
+(*      words). Storing the full transversal allows for direct access to *)
+(*      its elements.  *)
 
-     TODO: possibly more efficient algo, taking advantage of the cycles stored
-     in the perm. Each elt of the cycle corresponds to a particular power of
-     the perm acting on the considered point. This gives for each point and each
-     group element the complete set of all possible transitions to other points.
-     Orbit is then the connected component of a point.
+(*      TODO: possibly more efficient algo, taking advantage of the cycles stored *)
+(*      in the perm. Each elt of the cycle corresponds to a particular power of *)
+(*      the perm acting on the considered point. This gives for each point and each *)
+(*      group element the complete set of all possible transitions to other points. *)
+(*      Orbit is then the connected component of a point. *)
 
-     NOTE: in the following algo, we forget the orignating point and return
-     only for each point in the orbit the corresponding transversal.
-       *)
+(*      NOTE: in the following algo, we forget the orignating point and return *)
+(*      only for each point in the orbit the corresponding transversal. *)
+(*        *\) *)
 
-      let rec orbit_aux group queue transversal =
-        if Queue.is_empty queue then
-          transversal
-        else
-          let (point, u) = Queue.take queue in
-          if IntMap.mem point transversal then
-            orbit_aux group queue transversal
-          else
-            (let transversal = IntMap.add point u transversal in
-             List.iter (fun g -> Queue.add (action g point, Prod(u, g)) queue) group;
-             orbit_aux group queue transversal)
+(*       let rec orbit_aux group queue transversal = *)
+(*         if Queue.is_empty queue then *)
+(*           transversal *)
+(*         else *)
+(*           let (point, u) = Queue.take queue in *)
+(*           if IntMap.mem point transversal then *)
+(*             orbit_aux group queue transversal *)
+(*           else *)
+(*             (let transversal = IntMap.add point u transversal in *)
+(*              List.iter (fun g -> Queue.add (action g point, Prod(u, g)) queue) group; *)
+(*              orbit_aux group queue transversal) *)
               
-      let orbit group points =
-        let queue = Queue.create () in
-        List.iter (fun point -> Queue.add (point, identity) queue) points;
-        orbit_aux group queue IntMap.empty
+(*       let orbit group points = *)
+(*         let queue = Queue.create () in *)
+(*         List.iter (fun point -> Queue.add (point, identity) queue) points; *)
+(*         orbit_aux group queue IntMap.empty *)
 
-      let of_cycles cycles =
-        let cp = Concrete.of_cycles cycles in
-        Perm { p = cp; invp = Concrete.inv cp }
+(*       let of_cycles cycles = *)
+(*         let cp = Concrete.of_cycles cycles in *)
+(*         Perm { p = cp; invp = Concrete.inv cp } *)
 
-      let print p =
-        let perm = normalise_aux p in
-        Concrete.print perm.p
+(*       let print p = *)
+(*         let perm = normalise_aux p in *)
+(*         Concrete.print perm.p *)
 
-      let print_orbit orb =
-        let points = IntMap.bindings orb in
-        Tools.to_sseq (fun (point, transversal) ->
-                         Printf.sprintf "%d with transversal:\n%s\n" point (print transversal)
-                        ) "\n" points
+(*       let print_orbit orb = *)
+(*         let points = IntMap.bindings orb in *)
+(*         Tools.to_sseq (fun (point, transversal) -> *)
+(*                          Printf.sprintf "%d with transversal:\n%s\n" point (print transversal) *)
+(*                         ) "\n" points *)
 
-      module Operators =
-        struct
+(*       module Operators = *)
+(*         struct *)
           
-          let ( *** ) a b = Prod(a, b)
+(*           let ( *** ) a b = Prod(a, b) *)
 
-          let (^^) point perm = action perm point
+(*           let (^^) point perm = action perm point *)
 
-        end
+(*         end *)
 
-      let perm_test () =
-        let open Operators in
-        let alpha = of_cycles [ [| 0; 4; 1; 2 |] ] in
+(*       let perm_test () = *)
+(*         let open Operators in *)
+(*         let alpha = of_cycles [ [| 0; 4; 1; 2 |] ] in *)
 
-        let beta  = of_cycles [ [| 0; 4; 3 |]; [| 1; 2 |] ] in
+(*         let beta  = of_cycles [ [| 0; 4; 3 |]; [| 1; 2 |] ] in *)
 
-        let ab = alpha *** beta in
+(*         let ab = alpha *** beta in *)
 
-        let _ = Printf.printf "alpha\n%s\n" (print alpha) in
+(*         let _ = Printf.printf "alpha\n%s\n" (print alpha) in *)
 
-        let _ = Printf.printf "%s\n" (print beta) in
+(*         let _ = Printf.printf "%s\n" (print beta) in *)
 
-        let _ = Printf.printf "%s\n" (print ab) in
+(*         let _ = Printf.printf "%s\n" (print ab) in *)
 
-        (* Try some orbit computation *)
+(*         (\* Try some orbit computation *\) *)
 
-        let orb = orbit [alpha] [1] in
+(*         let orb = orbit [alpha] [1] in *)
 
-        print_string (print_orbit orb)
+(*         print_string (print_orbit orb) *)
 
 
-    end : PermType)
+(*     end : PermType) *)

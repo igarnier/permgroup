@@ -1,7 +1,8 @@
-module S = SchreierSims.Make(Perm.CycleBased)
+module Perm = Perm.CycleBased(Tools.Int)
+module S = SchreierSims.Make(Perm)
 
 let s5 =
-  Perm.CycleBased.(
+  Perm.(
     [
       of_cycles [ [| 0; 1 |] ];
       of_cycles [ [| 1; 2 |] ];
@@ -13,7 +14,7 @@ let s5 =
 
 
 let dih8 =
-  Perm.CycleBased.(
+  Perm.(
     [
       of_cycles [ [| 0; 1; 2; 3 |] ];
       of_cycles [ [| 0; 2 |] ];
@@ -21,7 +22,7 @@ let dih8 =
   )
 
 let m11 =
-  Perm.CycleBased.(
+  Perm.(
     [
       of_cycles [ [| 1;2;3;4;5;6;7;8;9;10;11 |] ];
       of_cycles [ [| 3;7;11;8 |]; [| 4;10;5;6 |] ]
@@ -30,7 +31,7 @@ let m11 =
   )
 
 let a8 =
-  Perm.CycleBased.(
+  Perm.(
     [
       of_cycles [ [| 1;2;3 |] ];
       of_cycles [ [| 2;3;4;5;6;7;8 |]; ]
@@ -39,7 +40,7 @@ let a8 =
   )
 
 let a13 =
-  Perm.CycleBased.(
+  Perm.(
     [
       of_cycles [ [| 1;2;3 |] ];
       of_cycles [ [| 3;4;5;6;7;8;9;10;11;12;13 |]; ]
@@ -58,5 +59,5 @@ let _ = Printf.printf "order = %d\n" (S.order group)
 (* let _ = *)
 (*   List.iter *)
 (*     (fun p -> *)
-(*      Printf.printf "%s\n%!" (Perm.CycleBased.print p) *)
+(*      Printf.printf "%s\n%!" (Perm.print p) *)
 (*     ) elements *)

@@ -2,6 +2,7 @@ module type S =
   sig
     type t
     type perm
+
     val mem : t -> perm -> bool
     val list : t -> perm list
     val uniform : t -> perm

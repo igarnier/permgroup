@@ -1,4 +1,17 @@
-module Int : sig type t = int val compare : int -> int -> int end
+module type Comparable =
+  sig
+
+    type t
+
+    val compare : t -> t -> int
+
+    val equal : t -> t -> bool
+
+    val to_string : t -> string
+
+  end
+
+module Int : Comparable with type t = int
 module IntSet : Set.S with type elt = int
 module IntMap : Map.S with type key = int
 
