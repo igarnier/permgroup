@@ -64,6 +64,8 @@ module type S =
     val pick_from_support : t -> elt option
 
     val of_cycles : elt array list -> t
+
+    val of_mapping : (elt * elt) list -> t
     (* val of_array  : int array -> t *)
 
     val print : t -> string
@@ -277,9 +279,26 @@ module CycleBased(Elt : Tools.Comparable) : S with type E.t = Elt.t =
       List.fold_left push_cyc identity  cycles
 
     (* Create a perm from an array-based repr *)
-    let rec cycle_of_elt arr i cyc =
-      if List.mem i cyc then List.rev cyc
-      else cycle_of_elt arr arr.(i) (i :: cyc)
+    let rec cycle_of m elt acc =
+      if List.mem elt acc then
+        List.rev acc
+      else
+        let im = List.assoc elt m in        
+        cycle_of m im (elt :: acc)
+
+    let rec of_mapping_aux m perm =
+      match m with
+      | [] -> perm
+      | (x, y) :: tail ->
+         if Map.mem x perm || E.equal x y then
+           of_mapping_aux tail perm
+         else
+           let cyc = Array.of_list (cycle_of m x []) in
+           push_cyc perm cyc
+
+    let of_mapping m =
+      of_mapping_aux m identity
+
 
     (* let rec of_array_aux arr i acc = *)
     (*   if i >= Array.length arr then acc *)
@@ -402,6 +421,18 @@ module ArrayBased(Size : sig val size : int end) =
     let pick_from_support perm =
       pick_from_support_aux perm 0
 
+    let of_mapping m =
+      let len = List.length m in
+      if len <> size then
+        failwith "Perm.of_mapping: wrong size"
+      else
+        let p = Array.copy identity in
+        for i = 0 to len - 1 do
+          p.(i) <- (List.assoc i m)
+        done;
+        p
+                            
+                            
     let print x =
       (Tools.strof_iarr x)
 

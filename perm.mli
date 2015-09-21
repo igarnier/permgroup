@@ -31,7 +31,8 @@ module type S =
     val pick_from_support : t -> elt option
 
     val of_cycles : elt array list -> t
-    (* val of_array  : int array -> t *)
+
+    val of_mapping : (elt * elt) list -> t
 
     val print : t -> string
 
