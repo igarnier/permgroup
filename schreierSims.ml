@@ -18,7 +18,6 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *)
 
-
 (* Schreier-Sims perm group signature *)
 module type S =
   sig
@@ -26,6 +25,8 @@ module type S =
     type t
            
     type perm
+
+    type elt
 
     (* Accessing the group *)
 
@@ -37,6 +38,8 @@ module type S =
 
     val order : t -> int
 
+    val transversal : t -> elt -> elt list
+
     (* Building the group *)
 
     val extend : t -> perm -> t
@@ -46,25 +49,29 @@ module type S =
   end
 
 (* The implementation of Schreier-Sims is functorialized over an implementation of permutations.  *)    
-module Make(Perm : Perm.S) : (S with type perm = Perm.t) =
+module Make(Perm : Perm.S)  =
   struct
 
     open Tools
 
     module Map = Map.Make(Perm.E)
-                         
+
+    module Set = Set.Make(Perm.E)
+
     type transversal = Perm.t Map.t
 
     (* If base = b_1 ... b_k; we have subgroups
      * G = G^(1) >= G^(2) .... G^(k+1) = <1>
      * where G^(2) stabilises b_1, ... G^(k+1) = <1> stabilises b_k.
      * therefore, we have k transversals: G^(1) mod G^(2), G^(2) mod G^(3), .. G^(k) mod G^(k+1)
-     * In what follows: cosets.(i) correspond to the transversal 
+     * In what follows: cosets.(i) correspond to the transversal
      * of G^(i+1) mod G^(i+2), i.e. G^(i+1) mod Stab(base.(0) ... base.(i))
      * e.g.: cosets.(0) = G^(1) mod G^(2) = G^(1) mod Stab(base.(0))
      *)
                               
     type perm = Perm.t
+
+    type elt = Perm.E.t
                               
     (* cosets of G mod Stab_{b_1,..,b_i}(G) *)                              
     type slice =
@@ -89,7 +96,6 @@ module Make(Perm : Perm.S) : (S with type perm = Perm.t) =
         (Perm.E.to_string base)
         (print_transversal cosets)
         (List.fold_left (fun acc perm -> acc^(Printf.sprintf "%s\n" (Perm.print perm))) "" gens)
-                   
 
     let rec mem group perm =
       match group with
@@ -117,7 +123,7 @@ module Make(Perm : Perm.S) : (S with type perm = Perm.t) =
            ) slice.cosets acc
 
     let list group = list_aux group Perm.identity []
-
+                              
     let uniform group =
       let rec loop chain word =
         match chain with
@@ -141,7 +147,7 @@ module Make(Perm : Perm.S) : (S with type perm = Perm.t) =
     let transversal_reprs transversal =
       Map.fold (fun _ elt acc -> elt :: acc) transversal []
 
-    let rec orbit_aux group point coset_repr transversal =
+    let rec transv_aux generators point coset_repr transversal =
       List.fold_left (fun transversal g ->
                       let point' = Perm.action g point in
                       if Map.mem point' transversal then
@@ -149,12 +155,18 @@ module Make(Perm : Perm.S) : (S with type perm = Perm.t) =
                       else
                         let prod        = Perm.prod coset_repr g in
                         let transversal = Map.add point' prod transversal in
-                        orbit_aux group point' prod transversal
-                     ) transversal group
+                        transv_aux generators point' prod transversal
+                     ) transversal generators
+
+    let transv generators point =
+      let transversal = Map.add point Perm.identity Map.empty in
+      transv_aux generators point Perm.identity transversal
 
     let orbit group point =
-      let transversal = Map.add point Perm.identity Map.empty in
-      orbit_aux group point Perm.identity transversal
+      match group with
+      | [] -> Map.add point Perm.identity Map.empty 
+      | slice :: _ ->
+         transv slice.gens point         
 
     let rec pick_from_support generators =
       match generators with
@@ -166,7 +178,7 @@ module Make(Perm : Perm.S) : (S with type perm = Perm.t) =
 
     let extend_transversal transversal group =
       Map.fold (fun point repr transversal ->
-                orbit_aux group point repr transversal
+                transv_aux group point repr transversal
                ) transversal transversal
 
     let rec extend subgroup_chain perm =
@@ -176,7 +188,7 @@ module Make(Perm : Perm.S) : (S with type perm = Perm.t) =
           | None -> 
              subgroup_chain
           | Some point ->
-             let transversal = orbit [perm] point in
+             let transversal = transv [perm] point in
              let reprs       = transversal_reprs transversal in
              {
                base          = point;
@@ -232,5 +244,5 @@ module Make(Perm : Perm.S) : (S with type perm = Perm.t) =
                
     let from_generators gens =
       List.fold_left extend [] gens 
-
+                                    
   end
