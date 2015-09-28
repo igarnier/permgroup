@@ -96,8 +96,8 @@ module CycleBased(Elt : Tools.Comparable) : S with type E.t = Elt.t =
     type elt = Elt.t
     
     (* Invariants:
-     1 cycles are nonempty lists
-     2 1-element cycles are omitted *)
+     1. cycles are nonempty lists
+     2. 1-element cycles are omitted *)
     type cycle = elt array
 
     (* A perm is a list of /disjoint/ cycles -- i.e. a set of cycles,
@@ -332,6 +332,51 @@ module CycleBased(Elt : Tools.Comparable) : S with type E.t = Elt.t =
 
   end
 
+
+(* (\* Hashed variant *\)     *)
+(* module HCycleBased(Elt : Tools.ComparableAndHashable) : S with type E.t = Elt.t = *)
+(*   struct *)
+
+(*     module C = CycleBased(Elt) *)
+
+(*     module E = C.E *)
+
+(*     module Set = C.Set *)
+
+(*     type t = *)
+(*       { *)
+(*         hash : int; *)
+(*         perm : C.t *)
+(*       } *)
+
+(*     let hash_cycle cyc = *)
+(*       Array.fold_left (fun acc elt -> *)
+                       
+(*                       ) *)
+        
+(*     let hash (perm : C.t) = *)
+(*       C.Map.fold (fun key (cycle, elt) -> *)
+
+        
+(*     let equal perm1 perm2 = *)
+(*       perm1.hash = perm2.hash && *)
+(*       C.equal perm1.perm perm2.perm *)
+
+(*     let identity = *)
+(*       { *)
+(*         hash = hash C.identity; *)
+(*         perm = C.identity *)
+(*       } *)
+
+(*     let prod perm1 perm2 = *)
+(*       { *)
+
+        
+(*       } *)
+
+(*   end *)
+
+    
 module ArrayBased(Size : sig val size : int end) =
   struct
 

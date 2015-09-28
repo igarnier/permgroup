@@ -12,6 +12,23 @@ module type Comparable =
   end
 
 
+module type ComparableAndHashable =
+  sig
+
+    type t
+
+    val compare : t -> t -> int
+
+    val equal : t -> t -> bool
+
+    (* invariant: hash should be invariant under [equal] *)
+    val hash : t -> int
+
+    val to_string : t -> string
+
+  end
+    
+
 module Int =
   struct
 

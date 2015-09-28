@@ -40,6 +40,9 @@ module type S =
 
 module CycleBased : functor (Elt : Tools.Comparable) -> S with type E.t = Elt.t
 
+(* Hashed variant *)
+(* module HCycleBased : functor (Elt : Tools.ComparableAndHashable) -> S with type E.t = Elt.t                                                                             *)
+
 module ArrayBased : functor (Size : sig val size : int end) -> S with type E.t = int
 
 (* module type PermType = *)
