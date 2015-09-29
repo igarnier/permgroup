@@ -74,7 +74,7 @@ module Make(Perm : Perm.S)  =
       }
 
     type t = slice list
-
+                                      
     let print_transversal tr =
       Map.fold (fun pt repr acc -> acc^(Printf.sprintf "from base to %s by %s\n") (Perm.E.to_string pt) (Perm.print repr)) tr ""
                    
