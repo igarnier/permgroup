@@ -185,7 +185,7 @@ module Make(Perm : Perm.S)  =
       match subgroup_chain with
       | [] ->
          (match Perm.pick_from_support perm with
-          | None -> 
+          | None ->
              subgroup_chain
           | Some point ->
              let transversal = transv [perm] point in
@@ -216,6 +216,9 @@ module Make(Perm : Perm.S)  =
              let rem     = Perm.prod perm (Perm.inv coset_p) in
              extend subgroup rem
          in
+         (* let gen_size   = (List.length slice.gens) - (List.length slice.gens_checked) in *)
+         (* let coset_size = (List.length slice.reprs) - (List.length slice.reprs_checked) in *)
+         (* let card       = float (gen_size * coset_size) in *)
          let (subgroup, reprs_explored, gens_explored) =
            Tools.fold_cartesian
              (fun coset_repr generator ((subgroup, reprs_explored, gens_explored) as acc) ->
@@ -224,6 +227,8 @@ module Make(Perm : Perm.S)  =
               then
                 acc
               else
+                (* if (Random.float card) > (card *. 0.2) then acc *)
+                (* else *)
                 let p = Perm.prod coset_repr generator in
                 let r =
                   try Map.find (Perm.action p slice.base) slice.cosets
@@ -241,8 +246,80 @@ module Make(Perm : Perm.S)  =
          in
          let slice = { slice with reprs_checked = reprs_explored; gens_checked = gens_explored } in
          slice :: subgroup
-               
+
+
+    let rec monte_carlo subgroup_chain perm =
+      match subgroup_chain with
+      | [] ->
+         (match Perm.pick_from_support perm with
+          | None -> 
+             subgroup_chain
+          | Some point ->
+             let transversal = transv [perm] point in
+             let reprs       = transversal_reprs transversal in
+             {
+               base          = point;
+               cosets        = transversal;
+               reprs         = reprs;
+               gens          = reprs;
+               reprs_checked = [];
+               gens_checked  = [];
+               index         = List.length reprs
+             } :: []
+         )
+      | slice :: subgroup ->
+         let slice' = slice in
+         let cosets = extend_transversal slice.cosets (perm :: slice.gens) in
+         let reprs  = transversal_reprs cosets in
+         let gens   = perm :: slice.gens in
+         let index  = List.length reprs in
+         let slice  = { slice with cosets; reprs; gens; index } in
+         let subgroup =
+           let im = Perm.action perm slice.base in
+           if Perm.E.equal im slice.base then
+             monte_carlo subgroup perm
+           else
+             let coset_p = Map.find im slice.cosets in
+             let rem     = Perm.prod perm (Perm.inv coset_p) in
+             monte_carlo subgroup rem
+         in
+         let (subgroup, reprs_explored, gens_explored, _) =
+           Tools.fold_cartesian
+             (fun coset_repr generator ((subgroup, reprs_explored, gens_explored, consecutive) as acc) ->
+              if
+                consecutive = -1 ||
+                  (List.exists (fun p -> Perm.equal p coset_repr) reprs_explored &&
+                   List.exists (fun p -> Perm.equal p generator) gens_explored)
+              then
+                acc
+              else
+                let p = Perm.prod coset_repr generator in
+                let r =
+                  try Map.find (Perm.action p slice.base) slice.cosets
+                  with Not_found ->
+                       begin
+                         let s = Perm.print p in
+                         Printf.printf "perm=\n%s\nbase = %s\nschreier =\n %s\ntransversal=%s\n" (Perm.print perm) (Perm.E.to_string slice.base) s (print_transversal slice'.cosets);
+                         raise Not_found
+                       end
+                in
+                let schreier = Perm.prod p (Perm.inv r) in
+                if mem subgroup schreier then
+                  if consecutive = 10 then
+                    (subgroup, coset_repr :: reprs_explored, generator :: gens_explored, -1)
+                  else
+                    (subgroup, coset_repr :: reprs_explored, generator :: gens_explored, consecutive + 1)
+                else
+                  let subgroup = monte_carlo subgroup schreier in
+                  (subgroup, coset_repr :: reprs_explored, generator :: gens_explored, 0)
+             )
+             slice.reprs slice.gens (subgroup, slice.reprs_checked, slice.gens_checked, 0)
+         in
+         let slice = { slice with reprs_checked = reprs_explored; gens_checked = gens_explored } in
+         slice :: subgroup
+
+                    
     let from_generators gens =
-      List.fold_left extend [] gens 
+      List.fold_left monte_carlo [] gens 
                                     
   end
