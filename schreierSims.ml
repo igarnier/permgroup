@@ -222,8 +222,8 @@ module Make(Perm : Perm.S)  =
          let (subgroup, reprs_explored, gens_explored) =
            Tools.fold_cartesian
              (fun coset_repr generator ((subgroup, reprs_explored, gens_explored) as acc) ->
-              if List.exists (fun p -> Perm.equal p coset_repr) reprs_explored &&
-                 List.exists (fun p -> Perm.equal p generator) gens_explored
+              if List.exists (fun p -> p == coset_repr) reprs_explored &&
+                 List.exists (fun p -> p == generator) gens_explored
               then
                 acc
               else
@@ -247,12 +247,11 @@ module Make(Perm : Perm.S)  =
          let slice = { slice with reprs_checked = reprs_explored; gens_checked = gens_explored } in
          slice :: subgroup
 
-
     let rec monte_carlo subgroup_chain perm =
       match subgroup_chain with
       | [] ->
          (match Perm.pick_from_support perm with
-          | None -> 
+          | None ->
              subgroup_chain
           | Some point ->
              let transversal = transv [perm] point in
@@ -267,8 +266,7 @@ module Make(Perm : Perm.S)  =
                index         = List.length reprs
              } :: []
          )
-      | slice :: subgroup ->
-         let slice' = slice in
+      | (slice as slice') :: subgroup ->
          let cosets = extend_transversal slice.cosets (perm :: slice.gens) in
          let reprs  = transversal_reprs cosets in
          let gens   = perm :: slice.gens in
@@ -283,13 +281,14 @@ module Make(Perm : Perm.S)  =
              let rem     = Perm.prod perm (Perm.inv coset_p) in
              monte_carlo subgroup rem
          in
+         (* complete group by sifting schreier generators *)
          let (subgroup, reprs_explored, gens_explored, _) =
            Tools.fold_cartesian
              (fun coset_repr generator ((subgroup, reprs_explored, gens_explored, consecutive) as acc) ->
               if
                 consecutive = -1 ||
-                  (List.exists (fun p -> Perm.equal p coset_repr) reprs_explored &&
-                   List.exists (fun p -> Perm.equal p generator) gens_explored)
+                  (List.exists (fun p -> p == coset_repr) reprs_explored &&
+                   List.exists (fun p -> p == generator) gens_explored)
               then
                 acc
               else
@@ -305,7 +304,7 @@ module Make(Perm : Perm.S)  =
                 in
                 let schreier = Perm.prod p (Perm.inv r) in
                 if mem subgroup schreier then
-                  if consecutive = 10 then
+                  if consecutive = 49 then
                     (subgroup, coset_repr :: reprs_explored, generator :: gens_explored, -1)
                   else
                     (subgroup, coset_repr :: reprs_explored, generator :: gens_explored, consecutive + 1)
@@ -317,9 +316,8 @@ module Make(Perm : Perm.S)  =
          in
          let slice = { slice with reprs_checked = reprs_explored; gens_checked = gens_explored } in
          slice :: subgroup
-
                     
     let from_generators gens =
-      List.fold_left monte_carlo [] gens 
+      List.fold_left extend [] gens 
                                     
   end
