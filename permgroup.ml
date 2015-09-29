@@ -21,32 +21,19 @@
 (* Schreier-Sims perm group signature *)
 module type S =
   sig
-
     type t
-           
     type perm
-
     type elt
-
-    (* Accessing the group *)
-
     val mem : t -> perm -> bool
-
     val list : t -> perm list
-
     val uniform : t -> perm
-
     val order : t -> int
-
-    val transversal : t -> elt -> elt list
-
-    (* Building the group *)
-
     val extend : t -> perm -> t
-
+    val extend_mc : t -> perm -> t
     val from_generators : perm list -> t
-                       
+    val from_generators_mc : perm list -> t                                         
   end
+
 
 (* The implementation of Schreier-Sims is functorialized over an implementation of permutations.  *)    
 module Make(Perm : Perm.S)  =
@@ -247,7 +234,7 @@ module Make(Perm : Perm.S)  =
          let slice = { slice with reprs_checked = reprs_explored; gens_checked = gens_explored } in
          slice :: subgroup
 
-    let rec monte_carlo subgroup_chain perm =
+    let rec extend_mc subgroup_chain perm =
       match subgroup_chain with
       | [] ->
          (match Perm.pick_from_support perm with
@@ -275,11 +262,11 @@ module Make(Perm : Perm.S)  =
          let subgroup =
            let im = Perm.action perm slice.base in
            if Perm.E.equal im slice.base then
-             monte_carlo subgroup perm
+             extend_mc subgroup perm
            else
              let coset_p = Map.find im slice.cosets in
              let rem     = Perm.prod perm (Perm.inv coset_p) in
-             monte_carlo subgroup rem
+             extend_mc subgroup rem
          in
          (* complete group by sifting schreier generators *)
          let (subgroup, reprs_explored, gens_explored, _) =
@@ -309,7 +296,7 @@ module Make(Perm : Perm.S)  =
                   else
                     (subgroup, coset_repr :: reprs_explored, generator :: gens_explored, consecutive + 1)
                 else
-                  let subgroup = monte_carlo subgroup schreier in
+                  let subgroup = extend_mc subgroup schreier in
                   (subgroup, coset_repr :: reprs_explored, generator :: gens_explored, 0)
              )
              slice.reprs slice.gens (subgroup, slice.reprs_checked, slice.gens_checked, 0)
@@ -319,5 +306,8 @@ module Make(Perm : Perm.S)  =
                     
     let from_generators gens =
       List.fold_left extend [] gens 
-                                    
+
+    let from_generators_mc gens =
+      List.fold_left extend_mc [] gens 
+                     
   end
