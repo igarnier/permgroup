@@ -4,7 +4,9 @@ module type S =
     type perm
     type elt
 
-    (* Accessing the group *)           
+    val trivial : t
+
+    (* Accessing the group *)
     val mem : t -> perm -> bool
     val list : t -> perm list
     val uniform : t -> perm

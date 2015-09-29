@@ -24,6 +24,7 @@ module type S =
     type t
     type perm
     type elt
+    val trivial : t
     val mem : t -> perm -> bool
     val list : t -> perm list
     val uniform : t -> perm
@@ -84,6 +85,8 @@ module Make(Perm : Perm.S)  =
         (print_transversal cosets)
         (List.fold_left (fun acc perm -> acc^(Printf.sprintf "%s\n" (Perm.print perm))) "" gens)
 
+    let trivial = []
+        
     let rec mem group perm =
       match group with
       | [] ->
