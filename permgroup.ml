@@ -40,7 +40,7 @@ module type S =
 module Make(Perm : Perm.S)  =
   struct
 
-    open Tools
+    open Permtools
 
     module Map = Map.Make(Perm.E)
 
@@ -210,7 +210,7 @@ module Make(Perm : Perm.S)  =
          (* let coset_size = (List.length slice.reprs) - (List.length slice.reprs_checked) in *)
          (* let card       = float (gen_size * coset_size) in *)
          let (subgroup, reprs_explored, gens_explored) =
-           Tools.fold_cartesian
+           Permtools.fold_cartesian
              (fun coset_repr generator ((subgroup, reprs_explored, gens_explored) as acc) ->
               if List.exists (fun p -> p == coset_repr) reprs_explored &&
                  List.exists (fun p -> p == generator) gens_explored
@@ -273,7 +273,7 @@ module Make(Perm : Perm.S)  =
          in
          (* complete group by sifting schreier generators *)
          let (subgroup, reprs_explored, gens_explored, _) =
-           Tools.fold_cartesian
+           Permtools.fold_cartesian
              (fun coset_repr generator ((subgroup, reprs_explored, gens_explored, consecutive) as acc) ->
               if
                 consecutive = -1 ||

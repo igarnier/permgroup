@@ -28,14 +28,14 @@
  * dealing with complex group-theoretic algorithms (see Group.ml). *)
 
 open Printf
-open Tools
+open Permtools
                         
 (* The abstract signature of a permutation implementation *)
 module type S =
   sig
 
     (* The type of elements on which the permutations act *)
-    module E : Tools.Comparable
+    module E : Permtools.Comparable
     module Set : Set.S with type elt = E.t
 
     type elt = E.t
@@ -84,7 +84,7 @@ module type S =
    The module DisjointCycles should implement PermSig.
  *)
 
-module CycleBased(Elt : Tools.Comparable) : S with type E.t = Elt.t =
+module CycleBased(Elt : Permtools.Comparable) : S with type E.t = Elt.t =
   struct
 
 
@@ -326,15 +326,15 @@ module CycleBased(Elt : Tools.Comparable) : S with type E.t = Elt.t =
           Map.fold (fun key (_, image) acc -> (key, image) :: acc) perm []
         in
         let dom, codom = List.split bindings in
-        let doms   = Tools.to_sseq E.to_string " " dom in
-        let codoms = Tools.to_sseq E.to_string " " codom in
+        let doms   = Permtools.to_sseq E.to_string " " dom in
+        let codoms = Permtools.to_sseq E.to_string " " codom in
         Printf.sprintf "%s\n%s\n" doms codoms
 
   end
 
 
 (* (\* Hashed variant *\)     *)
-(* module HCycleBased(Elt : Tools.ComparableAndHashable) : S with type E.t = Elt.t = *)
+(* module HCycleBased(Elt : Permtools.ComparableAndHashable) : S with type E.t = Elt.t = *)
 (*   struct *)
 
 (*     module C = CycleBased(Elt) *)
@@ -382,8 +382,8 @@ module ArrayBased(Size : sig val size : int end) =
 
     let size = Size.size
 
-    module E   = Tools.Int
-    module Set = Tools.IntSet
+    module E   = Permtools.Int
+    module Set = Permtools.IntSet
                  
     type elt = int
                  
@@ -479,7 +479,7 @@ module ArrayBased(Size : sig val size : int end) =
                             
                             
     let print x =
-      (Tools.strof_iarr x)
+      (Permtools.strof_iarr x)
 
   end
 
@@ -632,7 +632,7 @@ module type PermType =
 
 (*       let print_orbit orb = *)
 (*         let points = IntMap.bindings orb in *)
-(*         Tools.to_sseq (fun (point, transversal) -> *)
+(*         Permtools.to_sseq (fun (point, transversal) -> *)
 (*                          Printf.sprintf "%d with transversal:\n%s\n" point (print transversal) *)
 (*                         ) "\n" points *)
 

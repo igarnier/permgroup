@@ -1,4 +1,4 @@
-module Perm = Perm.CycleBased(Tools.Int)
+module Perm = Perm.CycleBased(Permtools.Int)
 module S = SchreierSims.Make(Perm)
 
 let s5 =

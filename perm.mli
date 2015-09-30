@@ -2,7 +2,7 @@ module type S =
   sig
 
     (* The type of elements on which the permutations act *)
-    module E : Tools.Comparable
+    module E : Permtools.Comparable
     module Set : Set.S with type elt = E.t
 
     type elt = E.t
@@ -38,10 +38,10 @@ module type S =
 
   end
 
-module CycleBased : functor (Elt : Tools.Comparable) -> S with type E.t = Elt.t
+module CycleBased : functor (Elt : Permtools.Comparable) -> S with type E.t = Elt.t
 
 (* Hashed variant *)
-(* module HCycleBased : functor (Elt : Tools.ComparableAndHashable) -> S with type E.t = Elt.t                                                                             *)
+(* module HCycleBased : functor (Elt : Permtools.ComparableAndHashable) -> S with type E.t = Elt.t                                                                             *)
 
 module ArrayBased : functor (Size : sig val size : int end) -> S with type E.t = int
 
@@ -58,10 +58,10 @@ module ArrayBased : functor (Size : sig val size : int end) -> S with type E.t =
 (*     val power : t -> int -> t *)
 (*     val action : t -> int -> int *)
 (*     val invert_action : t -> int -> int *)
-(*     val orbit : t list -> int list -> t Tools.IntMap.t *)
+(*     val orbit : t list -> int list -> t Permtools.IntMap.t *)
 (*     val of_cycles : int array list -> t *)
 (*     val print : t -> string *)
-(*     val print_orbit : t Tools.IntMap.t -> string *)
+(*     val print_orbit : t Permtools.IntMap.t -> string *)
 
 (*     module Operators : *)
 (*       sig val ( *** ) : t -> t -> t val ( ^^ ) : int -> t -> int end *)
