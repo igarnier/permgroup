@@ -68,6 +68,8 @@ module type S =
     val of_mapping : (elt * elt) list -> t
     (* val of_array  : int array -> t *)
 
+    val to_mapping : t -> (elt * elt) list
+                                           
     val print : t -> string
 
   end
@@ -298,7 +300,11 @@ module CycleBased(Elt : Permtools.Comparable) : S with type E.t = Elt.t =
 
     let of_mapping m =
       of_mapping_aux m identity
-
+                     
+    let to_mapping perm =
+      Map.fold (fun key (_, elt) acc ->
+                (key, elt) :: acc
+               ) perm []
 
     (* let rec of_array_aux arr i acc = *)
     (*   if i >= Array.length arr then acc *)
@@ -476,7 +482,17 @@ module ArrayBased(Size : sig val size : int end) =
           p.(i) <- (List.assoc i m)
         done;
         p
-                            
+
+    let to_mapping =
+      let rec loop arr i acc =
+        if i = Array.length arr then
+          acc
+        else
+          loop arr (i+1) ((i, arr.(i)) :: acc)
+      in
+      fun arr ->
+      loop arr 0 []
+          
                             
     let print x =
       (Permtools.strof_iarr x)

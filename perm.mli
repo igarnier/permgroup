@@ -34,6 +34,8 @@ module type S =
 
     val of_mapping : (elt * elt) list -> t
 
+    val to_mapping : t -> (elt * elt) list
+
     val print : t -> string
 
   end
