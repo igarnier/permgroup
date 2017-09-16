@@ -1,5 +1,7 @@
+open Permgroup
+    
 module Perm = Perm.CycleBased(Permtools.Int)
-module S = SchreierSims.Make(Perm)
+module S    = Group.Make(Perm)
 
 let s5 =
   Perm.(
@@ -40,26 +42,29 @@ let a8 =
   )
 
 let a13 =
-  (* 3113510400 *)
   Perm.(
     [
-      (* of_cycles [ [| 1;2;3 |] ]; *)
       of_mapping [ (1, 2); (2, 3); (3, 1) ];
       of_cycles [ [| 3;4;5;6;7;8;9;10;11;12;13 |]; ]
     ]
 
   )
-                 
-let group = a13
 
-let group = S.from_generators group
+let generators =
+  [ s5;  dih8; m11;  a8;    a13 ]
+let exact_orders =
+  [ 120; 8;    7920; 20160; 3113510400]
 
-let _ = Printf.printf "order = %d\n" (S.order group)
+let computed_orders =
+  generators
+  |> List.map S.from_generators
+  |> List.map S.order
 
-(* let elements = S.list group *)
+let _ =
+  if computed_orders = exact_orders then
+    let _ = Printf.printf "Test passed." in    
+    exit 0
+  else
+    let _ = Printf.printf "Bug found! Please report." in
+    exit 1
 
-(* let _ = *)
-(*   List.iter *)
-(*     (fun p -> *)
-(*      Printf.printf "%s\n%!" (Perm.print p) *)
-(*     ) elements *)

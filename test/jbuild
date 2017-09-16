@@ -1,0 +1,16 @@
+(jbuild_version 1)
+
+(executables
+ (
+  (names (tests))
+  (libraries (permgroup))
+ )
+)
+
+(alias
+ (
+  (name runtest)
+  (deps    (tests.exe))
+  (action (run ${<}))
+ )
+)

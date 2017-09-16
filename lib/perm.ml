@@ -1,5 +1,5 @@
 (*
- * Permutation implementations based on cycles or arrays. Work in progress.
+ * Permutation implementations based on cycles or arrays.
  * Copyright (C) 2015 Ilias Garnier
  *
  * This library is free software; you can redistribute it and/or
@@ -18,14 +18,6 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *)
 
-
-(* This module implements operations on permutations. Various applications
- * require different implementation of permutations, so we propose various
- * "concrete" implementations of the "PermSig" signature (disjoint cycle-based or
- * array-based). On top of that, we expose a functorial implementation of "lazy" 
- * permutations, parameterised with a concrete implementation. This allows
- * to easily delay product computation. This is particularly important when
- * dealing with complex group-theoretic algorithms (see Group.ml). *)
 
 open Printf
 open Permtools
@@ -98,7 +90,7 @@ module CycleBased(Elt : Permtools.Comparable) : S with type E.t = Elt.t =
     type elt = Elt.t
     
     (* Invariants:
-     1. cycles are nonempty lists
+     1. cycles are nonempty arrays
      2. 1-element cycles are omitted *)
     type cycle = elt array
 
