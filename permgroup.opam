@@ -6,10 +6,11 @@ bug-reports: "https://github.com/igarnier/permgroup/issues"
 dev-repo: "git+https://github.com/igarnier/permgroup.git"
 license: "Apache-2.0"
 build: [
-  ["jbuilder" "build" "-p" name "-j" jobs]
+  ["dune" "build" "-p" name "-j" jobs]
 ]
 depends: [
-  "jbuilder"                {build & >= "1.0+beta8"}
+  "dune"                {build & >= "1.0"}
+  "zarith"
 ]
 available: [ ocaml-version >= "4.04.1" ]
 descr: "

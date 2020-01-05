@@ -1,4 +1,3 @@
-
 module Permtools = Permtools
-module Perm      = Perm
-module Group     = Group
+module Perm = Perm
+module Group = Group

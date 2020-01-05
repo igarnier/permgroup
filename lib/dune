@@ -1,0 +1,4 @@
+(library
+ (name permgroup)
+ (public_name permgroup)
+ (libraries zarith))
