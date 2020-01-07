@@ -20,10 +20,18 @@
 
 open Permtools
 
+module type Element_sig = sig
+  include Ordered_sig
+
+  include Hashable_sig with type t := t
+
+  include Pp_sig with type t := t
+end
+
 (* The abstract signature of a permutation implementation *)
 module type S = sig
   (* The type of elements on which the permutations act *)
-  module E : Permtools.Comparable
+  module E : Element_sig
 
   module Set : Set.S with type elt = E.t
 
@@ -60,7 +68,7 @@ module type S = sig
 
   val to_mapping : t -> (elt * elt) list
 
-  val print : t -> string
+  val pp : Format.formatter -> t -> unit
 end
 
 (* --------------------------------------------------------
@@ -75,8 +83,7 @@ end
    The module DisjointCycles should implement PermSig.
  *)
 
-module CycleBased (Elt : Permtools.Comparable) : S with type E.t = Elt.t =
-struct
+module CycleBased (Elt : Element_sig) : S with type E.t = Elt.t = struct
   module E = Elt
   module Set = Set.Make (E)
   module Map = Map.Make (E)
@@ -285,16 +292,25 @@ struct
     let c = E.compare x y in
     if c < 0 then y else x
 
-  let print perm =
-    if Map.is_empty perm then "id"
+  let pp fmtr perm =
+    if Map.is_empty perm then Format.fprintf fmtr "id"
     else
       let bindings =
         Map.fold (fun key (_, image) acc -> (key, image) :: acc) perm []
       in
       let (dom, codom) = List.split bindings in
-      let doms = Permtools.to_sseq E.to_string " " dom in
-      let codoms = Permtools.to_sseq E.to_string " " codom in
-      Printf.sprintf "%s\n%s\n" doms codoms
+      Format.pp_print_list
+        ~pp_sep:(fun fmtr () -> Format.fprintf fmtr " ")
+        E.pp
+        fmtr
+        dom ;
+      Format.fprintf fmtr "@." ;
+      Format.pp_print_list
+        ~pp_sep:(fun fmtr () -> Format.fprintf fmtr " ")
+        E.pp
+        fmtr
+        codom ;
+      Format.fprintf fmtr "@."
 end
 
 (* (\* Hashed variant *\)     *)
@@ -345,7 +361,7 @@ struct
   let size = Size.size
 
   module E = Permtools.Int
-  module Set = Permtools.IntSet
+  module Set = Permtools.Int_set
 
   type elt = int
 
@@ -406,10 +422,10 @@ struct
   (* let of_array x = x *)
 
   let rec orbit_aux perm x acc =
-    if IntSet.mem x acc then acc
-    else orbit_aux perm perm.(x) (IntSet.add x acc)
+    if Int_set.mem x acc then acc
+    else orbit_aux perm perm.(x) (Int_set.add x acc)
 
-  let orbit (perm : t) (x : int) = orbit_aux perm x IntSet.empty
+  let orbit (perm : t) (x : int) = orbit_aux perm x Int_set.empty
 
   let rec pick_from_support_aux (perm : t) i =
     if i = Array.length perm then None
@@ -435,7 +451,13 @@ struct
     in
     fun arr -> loop arr 0 []
 
-  let print x = Permtools.strof_iarr x
+  let pp fmtr (x : t) =
+    let elements = Array.to_list x in
+    Format.pp_print_list
+      ~pp_sep:(fun fmtr () -> Format.fprintf fmtr ",")
+      Format.pp_print_int
+      fmtr
+      elements
 end
 
 (* ------------------------------------------------ *)

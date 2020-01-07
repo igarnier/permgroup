@@ -104,25 +104,26 @@ module Make (Perm : Perm.S) = struct
         and indices = List.map (fun s -> s.index) group in
         {generators; stabilizers; indices}
 
-  let print_transversal tr =
-    Map.fold
-      (fun pt repr acc ->
-        acc
-        ^ (Printf.sprintf "from base to %s by %s\n")
-            (Perm.E.to_string pt)
-            (Perm.print repr))
-      tr
-      ""
+  let pp_transversal fmtr tr =
+    let bindings = Map.bindings tr in
+    Format.pp_print_list
+      ~pp_sep:(fun fmtr () -> Format.fprintf fmtr "@.")
+      (fun fmtr (pt, repr) ->
+        Format.fprintf fmtr "from base to %a by %a" Perm.E.pp pt Perm.pp repr)
+      fmtr
+      bindings
 
-  let _print {base; cosets; gens; _} =
-    Printf.printf
-      "base = %s\ncosets =\n %s\ngens=\n%s\n-----------------------------\n"
-      (Perm.E.to_string base)
-      (print_transversal cosets)
-      (List.fold_left
-         (fun acc perm -> acc ^ Printf.sprintf "%s\n" (Perm.print perm))
-         ""
-         gens)
+  let _pp fmtr {base; cosets; gens; _} =
+    let open Format in
+    fprintf fmtr "base = %a@." Perm.E.pp base ;
+    fprintf fmtr "cosets =@." ;
+    fprintf fmtr "%a@." pp_transversal cosets ;
+    fprintf fmtr "gens=@." ;
+    Format.pp_print_list
+      ~pp_sep:(fun fmtr () -> Format.fprintf fmtr "@.")
+      Perm.pp
+      fmtr
+      gens
 
   let trivial = []
 

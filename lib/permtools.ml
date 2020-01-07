@@ -1,24 +1,21 @@
-module type Comparable = sig
+module type Ordered_sig = sig
   type t
 
   val compare : t -> t -> int
 
   val equal : t -> t -> bool
-
-  val to_string : t -> string
 end
 
-module type ComparableAndHashable = sig
+module type Hashable_sig = sig
   type t
 
-  val compare : t -> t -> int
-
-  val equal : t -> t -> bool
-
-  (* invariant: hash should be invariant under [equal] *)
   val hash : t -> int
+end
 
-  val to_string : t -> string
+module type Pp_sig = sig
+  type t
+
+  val pp : Format.formatter -> t -> unit
 end
 
 module Int = struct
@@ -29,12 +26,14 @@ module Int = struct
 
   let equal (x : int) (y : int) = x = y
 
-  let to_string = string_of_int
+  let hash (x : int) = Hashtbl.hash x
+
+  let pp = Format.pp_print_int
 end
 
-module IntSet = Set.Make (Int)
+module Int_set = Set.Make (Int)
 
-module IntMap = struct
+module Int_map = struct
   include Map.Make (Int)
 
   let find_opt k m = try Some (find k m) with Not_found -> None
