@@ -1,6 +1,6 @@
 (executables
  (names tests)
- (libraries permgroup))
+ (libraries permgroup unix))
 
 (alias
  (name runtest)

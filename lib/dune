@@ -1,4 +1,5 @@
 (library
  (name permgroup)
  (public_name permgroup)
+ (ocamlopt_flags -p)
  (libraries zarith))

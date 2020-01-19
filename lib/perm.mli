@@ -52,7 +52,9 @@ module type S = sig
 
   val to_mapping : t -> (elt * elt) list
 
-  val pp : Format.formatter -> t -> unit
+  include Pp_sig with type t := t
+
+  include Hashable_sig with type t := t
 end
 
 (** [CycleBased] is a functor associating any [Permtools.Ordered_sig] element type to permutations
@@ -62,7 +64,7 @@ end
     Moreover, the persistency allows for sharing. Computing the action of a permutation on a
     point is logarithmic in the size of the support of the permutation. Inversion and
     products are more costly than in the [ArrayBased] implementation. *)
-module CycleBased (Elt : Element_sig) : S with type E.t = Elt.t
+module Cycle_based (Elt : Element_sig) : S with type E.t = Elt.t
 
 (** [ArrayBased] is a functor that takes a [Size] as an argument and that builds a module
     of permutations on the set of integers between 0 and [Size.size-1]. These permutations
@@ -70,6 +72,8 @@ module CycleBased (Elt : Element_sig) : S with type E.t = Elt.t
     [CycleBased] ones, especially for permutations which have a small support. Acting
     on elements with those permutations is very fast, since it corresponds to accessing
     an array element. *)
-module ArrayBased (Size : sig
+module Array_based (Size : sig
   val size : int
 end) : S with type E.t = int
+
+module Hash_consed (X : S) : S with type E.t = X.E.t

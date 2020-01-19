@@ -68,7 +68,9 @@ module type S = sig
 
   val to_mapping : t -> (elt * elt) list
 
-  val pp : Format.formatter -> t -> unit
+  include Pp_sig with type t := t
+
+  include Hashable_sig with type t := t
 end
 
 (* --------------------------------------------------------
@@ -79,11 +81,9 @@ end
    Computing the action of a permutation on a point is logarithmic
    in the size of the support of the permutation. Inversion and
    products are quite costly though.
-
-   The module DisjointCycles should implement PermSig.
  *)
 
-module CycleBased (Elt : Element_sig) : S with type E.t = Elt.t = struct
+module Cycle_based (Elt : Element_sig) : S with type E.t = Elt.t = struct
   module E = Elt
   module Set = Set.Make (E)
   module Map = Map.Make (E)
@@ -98,8 +98,7 @@ module CycleBased (Elt : Element_sig) : S with type E.t = Elt.t = struct
   (* A perm is a list of /disjoint/ cycles -- i.e. a set of cycles,
    * implemented as a map from elements to pairs of
    * (cycles containing those elements, image through the permutation).
-   * Sharing allows to not waste too much memory, and we compute the
-   * orbit of an element in O(log(n)) (the access time) *)
+   * we compute the orbit of an element in O(log(n)) (the access time) *)
   type t = (cycle * elt) Map.t
 
   (* Identity permutation *)
@@ -107,18 +106,18 @@ module CycleBased (Elt : Element_sig) : S with type E.t = Elt.t = struct
   let cycles_equal cyc1 cyc2 =
     let len1 = Array.length cyc1 in
     let len2 = Array.length cyc2 in
-    len1 = len2
-    &&
-    let i = ref 0 in
-    let res = ref true in
-    while !i < len1 do
-      if not (E.equal cyc1.(!i) cyc2.(!i)) then (
-        res := false ;
-        i := len1 )
-      else () ;
-      incr i
-    done ;
-    !res
+    if len1 = len2 then (
+      let i = ref 0 in
+      let res = ref true in
+      while !i < len1 do
+        if not (E.equal cyc1.(!i) cyc2.(!i)) then (
+          res := false ;
+          i := len1 )
+        else () ;
+        incr i
+      done ;
+      !res )
+    else false
 
   let equal p1 p2 =
     Map.equal
@@ -311,50 +310,19 @@ module CycleBased (Elt : Element_sig) : S with type E.t = Elt.t = struct
         fmtr
         codom ;
       Format.fprintf fmtr "@."
+
+  let hash_cycle cyc =
+    Array.fold_left (fun acc elt -> Hashtbl.hash (acc, Elt.hash elt)) 0 cyc
+
+  let hash (perm : t) =
+    Map.fold
+      (fun key (cycle, elt) hash ->
+        Hashtbl.hash (hash, Elt.hash key, hash_cycle cycle, Elt.hash elt))
+      perm
+      0
 end
 
-(* (\* Hashed variant *\)     *)
-(* module HCycleBased(Elt : Permtools.ComparableAndHashable) : S with type E.t = Elt.t = *)
-(*   struct *)
-
-(*     module C = CycleBased(Elt) *)
-
-(*     module E = C.E *)
-
-(*     module Set = C.Set *)
-
-(*     type t = *)
-(*       { *)
-(*         hash : int; *)
-(*         perm : C.t *)
-(*       } *)
-
-(*     let hash_cycle cyc = *)
-(*       Array.fold_left (fun acc elt -> *)
-
-(*                       ) *)
-
-(*     let hash (perm : C.t) = *)
-(*       C.Map.fold (fun key (cycle, elt) -> *)
-
-(*     let equal perm1 perm2 = *)
-(*       perm1.hash = perm2.hash && *)
-(*       C.equal perm1.perm perm2.perm *)
-
-(*     let identity = *)
-(*       { *)
-(*         hash = hash C.identity; *)
-(*         perm = C.identity *)
-(*       } *)
-
-(*     let prod perm1 perm2 = *)
-(*       { *)
-
-(*       } *)
-
-(*   end *)
-
-module ArrayBased (Size : sig
+module Array_based (Size : sig
   val size : int
 end) =
 struct
@@ -367,7 +335,7 @@ struct
 
   type t = int array
 
-  let equal p1 p2 = p1 = p2
+  let equal (p1 : t) (p2 : t) = p1 = p2
 
   let identity = Array.init size (fun x -> x)
 
@@ -410,12 +378,6 @@ struct
         else (push_cyc cyc arr ; of_cycles_aux tail arr)
 
   let of_cycles cycles =
-    let size =
-      List.fold_left
-        (fun mx cyc -> max mx (Array.fold_left max 0 cyc))
-        0
-        cycles
-    in
     let a = Array.init size (fun x -> x) in
     of_cycles_aux cycles a
 
@@ -458,6 +420,91 @@ struct
       Format.pp_print_int
       fmtr
       elements
+
+  let hash (perm : t) =
+    Array.fold_left (fun acc elt -> Hashtbl.hash (acc, elt)) 0 perm
+end
+
+(* ------------------------------------------------ *)
+(* Hash-consed permutations *)
+module Hash_consed (P : S) = struct
+  module E = P.E
+  module Set = P.Set
+
+  type elt = P.elt
+
+  type t = {uid : int; hash : int; perm : P.t}
+
+  let table = Hashtbl.create 41
+
+  let prod_table = Hashtbl.create 41
+
+  let inv_table = Hashtbl.create 41
+
+  let fresh =
+    let x = ref 0 in
+    fun () ->
+      let v = !x in
+      incr x ; v
+
+  let add_to_table (perm : P.t) (hash : int) =
+    let uid = fresh () in
+    let p = {uid; hash; perm} in
+    Hashtbl.add table hash p ; p
+
+  let add_to_table_if_not_present (p : P.t) =
+    let hash = P.hash p in
+    match Hashtbl.find_all table hash with
+    | [] ->
+        add_to_table p hash
+    | l -> (
+      match List.find_opt (fun q -> P.equal p q.perm) l with
+      | None ->
+          add_to_table p hash
+      | Some q ->
+          q )
+
+  let equal p1 p2 = p1.uid = p2.uid
+
+  let identity =
+    let perm = P.identity in
+    add_to_table_if_not_present perm
+
+  let prod x y =
+    match Hashtbl.find_opt prod_table (x.uid, y.uid) with
+    | None ->
+        let prod = P.prod x.perm y.perm in
+        let prod = add_to_table_if_not_present prod in
+        Hashtbl.add prod_table (x.uid, y.uid) prod ;
+        prod
+    | Some q ->
+        q
+
+  let inv x =
+    match Hashtbl.find_opt inv_table x.uid with
+    | None ->
+        let inv = P.inv x.perm in
+        let inv = add_to_table_if_not_present inv in
+        Hashtbl.add inv_table x.uid inv ;
+        inv
+    | Some q ->
+        q
+
+  let action {perm; _} elt = P.action perm elt
+
+  let orbit {perm; _} elt = P.orbit perm elt
+
+  let pick_from_support {perm; _} = P.pick_from_support perm
+
+  let of_cycles cycles = add_to_table_if_not_present (P.of_cycles cycles)
+
+  let of_mapping mapping = add_to_table_if_not_present (P.of_mapping mapping)
+
+  let to_mapping {perm; _} = P.to_mapping perm
+
+  let pp fmtr {perm; _} = P.pp fmtr perm
+
+  let hash {hash; _} = hash
 end
 
 (* ------------------------------------------------ *)
