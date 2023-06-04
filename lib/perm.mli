@@ -76,4 +76,8 @@ module Array_based (Size : sig
   val size : int
 end) : S with type E.t = int
 
-module Hash_consed (X : S) : S with type E.t = X.E.t
+module Hash_consed (X : S) : sig
+  include S with type E.t = X.E.t
+
+  include Ordered_sig with type t := t
+end

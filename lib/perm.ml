@@ -81,7 +81,7 @@ end
    Computing the action of a permutation on a point is logarithmic
    in the size of the support of the permutation. Inversion and
    products are quite costly though.
- *)
+*)
 
 module Cycle_based (Elt : Element_sig) : S with type E.t = Elt.t = struct
   module E = Elt
@@ -112,25 +112,23 @@ module Cycle_based (Elt : Element_sig) : S with type E.t = Elt.t = struct
       while !i < len1 do
         if not (E.equal cyc1.(!i) cyc2.(!i)) then (
           res := false ;
-          i := len1 )
+          i := len1)
         else () ;
         incr i
       done ;
-      !res )
+      !res)
     else false
 
   let equal p1 p2 =
     Map.equal
-      (fun (cyc1, im1) (cyc2, im2) ->
-        E.equal im1 im2 && cycles_equal cyc1 cyc2)
+      (fun (cyc1, im1) (cyc2, im2) -> E.equal im1 im2 && cycles_equal cyc1 cyc2)
       p1
       p2
 
   let identity = Map.empty
 
   let rec _image_cycle_aux first point = function
-    | [] ->
-        failwith "Perm.image_cycle_aux: bug found"
+    | [] -> failwith "Perm.image_cycle_aux: bug found"
     | [x] ->
         if E.equal x point then first
         else failwith "Perm.image_cycle_aux: bug found"
@@ -215,7 +213,8 @@ module Cycle_based (Elt : Element_sig) : S with type E.t = Elt.t = struct
       try Hashtbl.find table cyc
       with Not_found ->
         let icyc = inv_cycle cyc in
-        Hashtbl.add table cyc icyc ; icyc
+        Hashtbl.add table cyc icyc ;
+        icyc
 
   (* Inverse of a permutation. *)
   let inv (p : t) =
@@ -261,8 +260,7 @@ module Cycle_based (Elt : Element_sig) : S with type E.t = Elt.t = struct
 
   let rec of_mapping_aux m perm =
     match m with
-    | [] ->
-        perm
+    | [] -> perm
     | (x, y) :: tail ->
         if Map.mem x perm || E.equal x y then of_mapping_aux tail perm
         else
@@ -369,13 +367,14 @@ struct
 
   let rec of_cycles_aux cycles arr =
     match cycles with
-    | [] ->
-        arr
+    | [] -> arr
     | cyc :: tail ->
         let len = Array.length cyc in
         if len = 0 then failwith "empty cycle"
         else if len = 1 then of_cycles_aux tail arr
-        else (push_cyc cyc arr ; of_cycles_aux tail arr)
+        else (
+          push_cyc cyc arr ;
+          of_cycles_aux tail arr)
 
   let of_cycles cycles =
     let a = Array.init size (fun x -> x) in
@@ -427,13 +426,16 @@ end
 
 (* ------------------------------------------------ *)
 (* Hash-consed permutations *)
+
 module Hash_consed (P : S) = struct
   module E = P.E
   module Set = P.Set
 
   type elt = P.elt
 
-  type t = {uid : int; hash : int; perm : P.t}
+  type t = { uid : int; hash : int; perm : P.t }
+
+  let compare (p1 : t) (p2 : t) = p2.uid - p1.uid
 
   let table = Hashtbl.create 41
 
@@ -445,24 +447,23 @@ module Hash_consed (P : S) = struct
     let x = ref 0 in
     fun () ->
       let v = !x in
-      incr x ; v
+      incr x ;
+      v
 
   let add_to_table (perm : P.t) (hash : int) =
     let uid = fresh () in
-    let p = {uid; hash; perm} in
-    Hashtbl.add table hash p ; p
+    let p = { uid; hash; perm } in
+    Hashtbl.add table hash p ;
+    p
 
   let add_to_table_if_not_present (p : P.t) =
     let hash = P.hash p in
     match Hashtbl.find_all table hash with
-    | [] ->
-        add_to_table p hash
+    | [] -> add_to_table p hash
     | l -> (
-      match List.find_opt (fun q -> P.equal p q.perm) l with
-      | None ->
-          add_to_table p hash
-      | Some q ->
-          q )
+        match List.find_opt (fun q -> P.equal p q.perm) l with
+        | None -> add_to_table p hash
+        | Some q -> q)
 
   let equal p1 p2 = p1.uid = p2.uid
 
@@ -477,8 +478,7 @@ module Hash_consed (P : S) = struct
         let prod = add_to_table_if_not_present prod in
         Hashtbl.add prod_table (x.uid, y.uid) prod ;
         prod
-    | Some q ->
-        q
+    | Some q -> q
 
   let inv x =
     match Hashtbl.find_opt inv_table x.uid with
@@ -487,24 +487,23 @@ module Hash_consed (P : S) = struct
         let inv = add_to_table_if_not_present inv in
         Hashtbl.add inv_table x.uid inv ;
         inv
-    | Some q ->
-        q
+    | Some q -> q
 
-  let action {perm; _} elt = P.action perm elt
+  let action { perm; _ } elt = P.action perm elt
 
-  let orbit {perm; _} elt = P.orbit perm elt
+  let orbit { perm; _ } elt = P.orbit perm elt
 
-  let pick_from_support {perm; _} = P.pick_from_support perm
+  let pick_from_support { perm; _ } = P.pick_from_support perm
 
   let of_cycles cycles = add_to_table_if_not_present (P.of_cycles cycles)
 
   let of_mapping mapping = add_to_table_if_not_present (P.of_mapping mapping)
 
-  let to_mapping {perm; _} = P.to_mapping perm
+  let to_mapping { perm; _ } = P.to_mapping perm
 
-  let pp fmtr {perm; _} = P.pp fmtr perm
+  let pp fmtr { perm; _ } = P.pp fmtr perm
 
-  let hash {hash; _} = hash
+  let hash { hash; _ } = hash
 end
 
 (* ------------------------------------------------ *)

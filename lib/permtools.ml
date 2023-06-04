@@ -21,8 +21,7 @@ end
 module Int = struct
   type t = int
 
-  let compare (x : int) (y : int) =
-    if x < y then -1 else if x = y then 0 else 1
+  let compare (x : int) (y : int) = if x < y then -1 else if x = y then 0 else 1
 
   let equal (x : int) (y : int) = x = y
 
@@ -41,10 +40,8 @@ end
 
 let to_sseq f sep l =
   match l with
-  | [] ->
-      ""
-  | [x] ->
-      f x
+  | [] -> ""
+  | [x] -> f x
   | x :: tl ->
       let res = List.fold_right (fun elt acc -> sep ^ f elt ^ acc) tl "" in
       f x ^ res
@@ -65,14 +62,12 @@ let rec mk_ints i j = if i > j then [] else i :: mk_ints (i + 1) j
 (* fold over a cartesian product *)
 let rec fold_cartesian f l1 l2 l2' acc =
   match l1 with
-  | [] ->
-      acc
+  | [] -> acc
   | x1 :: tl1 -> (
-    match l2' with
-    | [] ->
-        fold_cartesian f tl1 l2 l2 acc
-    | x2 :: tl2 ->
-        let acc = f x1 x2 acc in
-        fold_cartesian f l1 l2 tl2 acc )
+      match l2' with
+      | [] -> fold_cartesian f tl1 l2 l2 acc
+      | x2 :: tl2 ->
+          let acc = f x1 x2 acc in
+          fold_cartesian f l1 l2 tl2 acc)
 
 let fold_cartesian f l1 l2 acc = fold_cartesian f l1 l2 l2 acc

@@ -10,15 +10,15 @@ module type S = sig
   type elt
 
   (** [info] packs some informations about the internal representation of the permutation group.*)
-  type info = {
-    generators : perm list;
-        (** [generators] is a list of generators for the group. *)
-    stabilizers : elt list;
-        (** [stabilizers] lists the stabilizers of the chain of subgroups. The length of this chain
+  type info =
+    { generators : perm list;
+          (** [generators] is a list of generators for the group. *)
+      stabilizers : elt list;
+          (** [stabilizers] lists the stabilizers of the chain of subgroups. The length of this chain
           should be logarithmic in the size of the group. Otherwise, things will be slow. *)
-    indices : int list;
-        (** [indices] lists the number of cosets of each subgroup w.r.t. the stabilizers. *)
-  }
+      indices : int list
+          (** [indices] lists the number of cosets of each subgroup w.r.t. the stabilizers. *)
+    }
 
   (** The function [info] returns the info for the given group. *)
   val info : t -> info
@@ -57,6 +57,10 @@ module type S = sig
   val from_generators_mc : perm list -> t
 end
 
-(** [Make] takes an implementation of [Perm.S] and returns an implementation of permutation
-    groups for those permutations. *)
-module Make (Perm : Perm.S) : S with type perm = Perm.t and type elt = Perm.elt
+(** [Make] takes the signature of type [Perm.Element_sig] and returns an implementation
+    of permutation groups for those permutations. *)
+module Make (E : Perm.Element_sig) : sig
+  module Perm : module type of Perm.Hash_consed (Perm.Cycle_based (E))
+
+  include S with type elt = E.t and type perm = Perm.t
+end

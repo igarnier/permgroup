@@ -26,11 +26,8 @@ module type S = sig
 
   type elt
 
-  type info = {
-    generators : perm list;
-    stabilizers : elt list;
-    indices : int list;
-  }
+  type info =
+    { generators : perm list; stabilizers : elt list; indices : int list }
 
   val info : t -> info
 
@@ -53,14 +50,16 @@ module type S = sig
   val from_generators_mc : perm list -> t
 end
 
-(* The implementation of Schreier-Sims is functorialized over an implementation of permutations.  *)
-module Make (Perm : Perm.S) = struct
-  module Map = Map.Make (Perm.E)
-  module Set = Set.Make (Perm.E)
+module Make (E : Perm.Element_sig) = struct
+  module Perm = Perm.Hash_consed (Perm.Cycle_based (E))
+  module EMap = Map.Make (Perm.E)
+  module ESet = Set.Make (Perm.E)
 
   type perm = Perm.t
 
-  type elt = Perm.E.t
+  type elt = E.t
+
+  module Perm_set = Set.Make (Perm)
 
   module Hash_set_pair = struct
     module H = Hashtbl.Make (struct
@@ -80,60 +79,35 @@ module Make (Perm : Perm.S) = struct
     let mem set perm_pair = H.mem set perm_pair
   end
 
-  (* module Hash_set = struct
-   *   module H = Hashtbl.Make (Perm)
-   *
-   *   type t = unit H.t
-   *
-   *   let create () = H.create 41
-   *
-   *   let add set perm_pair = H.add set perm_pair ()
-   *
-   *   let mem set perm_pair = H.mem set perm_pair
-   * end *)
-
   type t = slice list
 
-  (* If base = b_1 ... b_k; we have subgroups
-     G = G^(1) >= G^(2) .... G^(k+1) = <1>
-     where G^(2) stabilises b_1, ... G^(k+1) = <1> stabilises b_k.
-     therefore, we have k transversals: G^(1) mod G^(2), G^(2) mod G^(3), .. G^(k) mod G^(k+1)
-     In what follows: cosets.(i) correspond to the transversal
-     of G^(i+1) mod G^(i+2), i.e. G^(i+1) mod Stab(base.(0) ... base.(i))
-     e.g.: cosets.(0) = G^(1) mod G^(2) = G^(1) mod Stab(base.(0)) *)
+  and slice =
+    { base : Perm.elt;
+      cosets : transversal;
+      reprs : Perm_set.t;
+      (* [reprs] = codomain of [cosets] *)
+      gens : Perm_set.t;
+      (* strong generating set for the whole (sub)group *)
+      schreier_checked : Hash_set_pair.t;
+      index : int (* number of cosets w.r.t. the stabiliser subgroup *)
+    }
 
-  (* cosets of G mod Stab_{b_1,..,b_i}(G) *)
-  and slice = {
-    base : Perm.elt;
-    cosets : transversal;
-    reprs : Perm.t list;
-    (* [reprs] = codomain of [cosets] *)
-    gens : Perm.t list;
-    (* strong generating set for the whole (sub)group *)
-    schreier_checked : Hash_set_pair.t;
-    index : int; (* number of cosets w.r.t. the stabiliser subgroup *)
-  }
+  and transversal = Perm.t EMap.t
 
-  and transversal = Perm.t Map.t
-
-  type info = {
-    generators : perm list;
-    stabilizers : elt list;
-    indices : int list;
-  }
+  type info =
+    { generators : perm list; stabilizers : elt list; indices : int list }
 
   let info group =
     match group with
-    | [] ->
-        {generators = [Perm.identity]; stabilizers = []; indices = []}
+    | [] -> { generators = [Perm.identity]; stabilizers = []; indices = [] }
     | slice :: _slices ->
-        let generators = slice.gens
+        let generators = Perm_set.elements slice.gens
         and stabilizers = List.map (fun s -> s.base) group
         and indices = List.map (fun s -> s.index) group in
-        {generators; stabilizers; indices}
+        { generators; stabilizers; indices }
 
   let pp_transversal fmtr tr =
-    let bindings = Map.bindings tr in
+    let bindings = EMap.bindings tr in
     Format.pp_print_list
       ~pp_sep:(fun fmtr () -> Format.fprintf fmtr "@.")
       (fun fmtr (pt, repr) ->
@@ -141,7 +115,7 @@ module Make (Perm : Perm.S) = struct
       fmtr
       bindings
 
-  let _pp fmtr {base; cosets; gens; _} =
+  let _pp fmtr { base; cosets; gens; _ } =
     let open Format in
     fprintf fmtr "base = %a@." Perm.E.pp base ;
     fprintf fmtr "cosets =@." ;
@@ -151,34 +125,32 @@ module Make (Perm : Perm.S) = struct
       ~pp_sep:(fun fmtr () -> Format.fprintf fmtr "@.")
       Perm.pp
       fmtr
-      gens
+      (Perm_set.elements gens)
 
   let trivial = []
 
   (* Check whether a permutation belongs to the group. *)
   let rec mem group perm =
     match group with
-    | [] ->
-        Perm.equal perm Perm.identity
+    | [] -> Perm.equal perm Perm.identity
     | slice :: subgroup -> (
         let im = Perm.action perm slice.base in
         if Perm.E.equal im slice.base then mem subgroup perm
         else
           try
-            let coset_p = Map.find im slice.cosets in
+            let coset_p = EMap.find im slice.cosets in
             let rem = Perm.prod perm (Perm.inv coset_p) in
             mem subgroup rem
-          with Not_found -> false )
+          with Not_found -> false)
 
   (* List all group elements *)
   let rec list group = list_aux group Perm.identity []
 
   and list_aux group current_word acc =
     match group with
-    | [] ->
-        current_word :: acc
+    | [] -> current_word :: acc
     | slice :: subgroup ->
-        Map.fold
+        EMap.fold
           (fun _ elt acc -> list_aux subgroup (Perm.prod elt current_word) acc)
           slice.cosets
           acc
@@ -187,11 +159,10 @@ module Make (Perm : Perm.S) = struct
   let uniform group =
     let rec loop chain word =
       match chain with
-      | [] ->
-          word
+      | [] -> word
       | slice :: tail ->
           let n = Random.int slice.index in
-          let elt = List.nth slice.reprs n in
+          let elt = List.nth (Perm_set.elements slice.reprs) n in
           loop tail (Perm.prod elt word)
     in
     loop group Perm.identity
@@ -199,116 +170,115 @@ module Make (Perm : Perm.S) = struct
   (* Order of a group *)
   let rec order group =
     match group with
-    | [] ->
-        Z.one
-    | slice :: tail ->
-        Z.(mul (of_int slice.index) (order tail))
+    | [] -> Z.one
+    | slice :: tail -> Z.(mul (of_int slice.index) (order tail))
 
   (* ---------------------------------------------------------- *)
   (* Schreier-Sims construction *)
 
-  let transversal_reprs (transversal : transversal) : perm list =
-    Map.fold (fun _ perm acc -> perm :: acc) transversal []
+  let transversal_reprs (transversal : transversal) : Perm_set.t =
+    EMap.fold
+      (fun _ perm acc -> Perm_set.add perm acc)
+      transversal
+      Perm_set.empty
 
   (* Compute a transversal for the group generated by [generator] modulo the
      subgroup stabilising [point]. *)
-  let rec transv (generators : perm list) (point : elt) : transversal =
-    let transversal = Map.add point Perm.identity Map.empty in
+  let rec transv (generators : Perm_set.t) (point : elt) : transversal =
+    let transversal = EMap.add point Perm.identity EMap.empty in
     transv_aux generators point Perm.identity transversal
 
-  and transv_aux (generators : perm list) (point : elt) (coset_repr : perm)
+  and transv_aux (generators : Perm_set.t) (point : elt) (coset_repr : perm)
       (transversal : transversal) : transversal =
-    List.fold_left
-      (fun transversal g ->
+    Perm_set.fold
+      (fun g transversal ->
         let point' = Perm.action g point in
-        if Map.mem point' transversal then transversal
+        if EMap.mem point' transversal then transversal
         else
           let prod = Perm.prod coset_repr g in
-          let transversal = Map.add point' prod transversal in
+          let transversal = EMap.add point' prod transversal in
           transv_aux generators point' prod transversal)
-      transversal
       generators
+      transversal
 
   let _orbit group point =
     match group with
-    | [] ->
-        Map.add point Perm.identity Map.empty
-    | slice :: _ ->
-        transv slice.gens point
-
-  (* let rec pick_from_support generators =
-   *   match generators with
-   *   | [] -> None
-   *   | g :: tail ->
-   *     match Perm.pick_from_support g with
-   *     | None -> pick_from_support tail
-   *     | x    -> x *)
+    | [] -> EMap.add point Perm.identity EMap.empty
+    | slice :: _ -> transv slice.gens point
 
   (* Extend a transversal with new group elements. It is expected
      that [group] is a superset of the group elements used to
      generate [transversal] *)
-  let extend_transversal (transversal : transversal) (group : perm list) :
+  let extend_transversal (transversal : transversal) (generators : Perm_set.t) :
       transversal =
-    Map.fold
-      (fun point repr transversal -> transv_aux group point repr transversal)
+    EMap.fold
+      (fun point repr transversal ->
+        transv_aux generators point repr transversal)
       transversal
       transversal
+
+  let fold_cartesian_set f s1 s2 acc =
+    Perm_set.fold
+      (fun x acc -> Perm_set.fold (fun y acc -> f x y acc) s2 acc)
+      s1
+      acc
 
   (* Extend a subgroup chain with a new permutation *)
   let rec extend subgroup_chain perm =
     match subgroup_chain with
     | [] -> (
-      match Perm.pick_from_support perm with
-      | None ->
-          subgroup_chain
-      | Some point ->
-          let transversal = transv [perm] point in
-          let reprs = transversal_reprs transversal in
-          [
-            {
-              base = point;
-              cosets = transversal;
-              reprs;
-              gens = reprs;
-              schreier_checked = Hash_set_pair.create ();
-              index = List.length reprs;
-            };
-          ] )
+        match Perm.pick_from_support perm with
+        | None -> subgroup_chain
+        | Some point ->
+            let transversal = transv (Perm_set.singleton perm) point in
+            let reprs = transversal_reprs transversal in
+            [ { base = point;
+                cosets = transversal;
+                reprs;
+                gens = reprs;
+                schreier_checked = Hash_set_pair.create ();
+                index = Perm_set.cardinal reprs
+              } ])
     | slice :: subgroup ->
-        let gens = perm :: slice.gens in
+        let gens = Perm_set.add perm slice.gens in
         let cosets = extend_transversal slice.cosets gens in
         let reprs = transversal_reprs cosets in
-        let index = List.length reprs in
-        let slice = {slice with cosets; reprs; gens; index} in
+        let old_gens = slice.gens in
+        let new_gens = Perm_set.singleton perm in
+        let old_reprs = slice.reprs in
+        let new_reprs = Perm_set.diff reprs slice.reprs in
+        let index = Perm_set.cardinal reprs in
+        let slice = { slice with cosets; reprs; gens; index } in
         (* Recursively extend subgroups.
            Invariant: [subgroup] is a well-formed stabilizer chain *)
         let subgroup =
           let im = Perm.action perm slice.base in
           if Perm.E.equal im slice.base then extend subgroup perm
           else
-            let coset_p = Map.find im slice.cosets in
+            let coset_p = EMap.find im slice.cosets in
             let rem = Perm.prod perm (Perm.inv coset_p) in
             if mem subgroup rem then subgroup else extend subgroup rem
         in
         (* complete group by sifting schreier generators *)
-        let subgroup =
-          Permtools.fold_cartesian
-            (fun coset_repr generator subgroup ->
-              if
-                Hash_set_pair.mem slice.schreier_checked (coset_repr, generator)
-              then subgroup
-              else
-                let p = Perm.prod coset_repr generator in
-                let r = Map.find (Perm.action p slice.base) slice.cosets in
-                Hash_set_pair.add slice.schreier_checked (coset_repr, generator) ;
-                let schreier = Perm.prod p (Perm.inv r) in
-                if mem subgroup schreier then subgroup
-                else extend subgroup schreier)
-            slice.reprs
-            slice.gens
-            subgroup
-        in
+        let subgroup = extend_schreier slice new_reprs old_gens subgroup in
+        let subgroup = extend_schreier slice old_reprs new_gens subgroup in
+        let subgroup = extend_schreier slice new_reprs new_gens subgroup in
         slice :: subgroup
+
+  and extend_schreier slice reprs gens subgroup =
+    fold_cartesian_set
+      (fun coset_repr generator subgroup ->
+        if Hash_set_pair.mem slice.schreier_checked (coset_repr, generator) then
+          subgroup
+        else
+          let p = Perm.prod coset_repr generator in
+          let r = EMap.find (Perm.action p slice.base) slice.cosets in
+          Hash_set_pair.add slice.schreier_checked (coset_repr, generator) ;
+          let schreier = Perm.prod p (Perm.inv r) in
+          if mem subgroup schreier then subgroup else extend subgroup schreier)
+      reprs
+      gens
+      subgroup
 
   (* Extend a subgroup chain with a new permutation *)
   [@@@warning "-32"]
@@ -316,33 +286,31 @@ module Make (Perm : Perm.S) = struct
   let rec extend_mc subgroup_chain perm =
     match subgroup_chain with
     | [] -> (
-      match Perm.pick_from_support perm with
-      | None ->
-          subgroup_chain
-      | Some point ->
-          let transversal = transv [perm] point in
-          let reprs = transversal_reprs transversal in
-          [
-            {
-              base = point;
-              cosets = transversal;
-              reprs;
-              gens = reprs;
-              schreier_checked = Hash_set_pair.create ();
-              index = List.length reprs;
-            };
-          ] )
+        match Perm.pick_from_support perm with
+        | None -> subgroup_chain
+        | Some point ->
+            let transversal = transv (Perm_set.singleton perm) point in
+            let reprs = transversal_reprs transversal in
+            [ { base = point;
+                cosets = transversal;
+                reprs;
+                gens = reprs;
+                schreier_checked = Hash_set_pair.create ();
+                index = Perm_set.cardinal reprs
+              } ])
     | slice :: subgroup ->
-        let cosets = extend_transversal slice.cosets (perm :: slice.gens) in
+        let gens = Perm_set.add perm slice.gens in
+        let cosets = extend_transversal slice.cosets gens in
         let reprs = transversal_reprs cosets in
-        let gens = perm :: slice.gens in
-        let index = List.length reprs in
-        let slice = {slice with cosets; reprs; gens; index} in
+        let index = Perm_set.cardinal reprs in
+        let new_gens = Perm_set.diff gens slice.gens in
+        let new_reprs = Perm_set.diff reprs slice.reprs in
+        let slice = { slice with cosets; reprs; gens; index } in
         let subgroup =
           let im = Perm.action perm slice.base in
           if Perm.E.equal im slice.base then extend_mc subgroup perm
           else
-            let coset_p = Map.find im slice.cosets in
+            let coset_p = EMap.find im slice.cosets in
             let rem = Perm.prod perm (Perm.inv coset_p) in
             if mem subgroup rem then subgroup else extend_mc subgroup rem
         in
@@ -350,18 +318,17 @@ module Make (Perm : Perm.S) = struct
         let subgroup =
           Permtools.fold_cartesian
             (fun coset_repr generator subgroup ->
-              if
-                Hash_set_pair.mem slice.schreier_checked (coset_repr, generator)
+              if Hash_set_pair.mem slice.schreier_checked (coset_repr, generator)
               then subgroup
               else
                 let p = Perm.prod coset_repr generator in
-                let r = Map.find (Perm.action p slice.base) slice.cosets in
+                let r = EMap.find (Perm.action p slice.base) slice.cosets in
                 let schreier = Perm.prod p (Perm.inv r) in
                 Hash_set_pair.add slice.schreier_checked (coset_repr, generator) ;
                 if mem subgroup schreier then subgroup
                 else extend_mc subgroup schreier)
-            slice.reprs
-            slice.gens
+            (Perm_set.elements new_reprs)
+            (Perm_set.elements new_gens)
             subgroup
         in
         slice :: subgroup
